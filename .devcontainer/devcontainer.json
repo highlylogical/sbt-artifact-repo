@@ -1,6 +1,4 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
-  "features": {
-    "ghcr.io/ebaskoro/devcontainer-features/scala:1": {"installSbt": true, "version": "2.13.15"}
-  }
+  "image": "mcr.microsoft.com/devcontainers/java:17",
+  "postCreateCommand": "sdk install sbt 1.10.5"
 }
