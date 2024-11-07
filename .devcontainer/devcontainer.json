@@ -1,4 +1,4 @@
 {
   "image": "mcr.microsoft.com/devcontainers/java:17",
-  "postCreateCommand": "sdk install sbt 1.10.5"
+  "postCreateCommand": "bash sdk install sbt 1.10.5"
 }
