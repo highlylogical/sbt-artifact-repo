@@ -6,6 +6,7 @@ ThisBuild / sbtPluginPublishLegacyMavenStyle := false
 ThisBuild / scalaVersion := "2.12.20"
 
 ThisBuild / organization := "com.highlylogical.oss"
+ThisBuild / homepage := Some(url("https://github.com/highlylogical/sbt-artifact-repo"))
 
 ThisBuild / licenses := List(License.MIT)
 
