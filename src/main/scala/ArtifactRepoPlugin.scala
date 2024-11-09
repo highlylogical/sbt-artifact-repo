@@ -1,6 +1,6 @@
 package com.highlylogical.oss
 
-import sbt.io.Pat
+import sbt.io.Path
 import sbt.toRepositoryName
 import sbt.{AutoPlugin, Credentials, Def, Keys, MavenRepository}
 

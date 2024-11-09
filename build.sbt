@@ -1,9 +1,14 @@
-ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "2.12.20"
 
 ThisBuild / organization := "com.highlylogical.oss"
 
+ThisBuild / licenses := List(License.MIT)
+
+ThisBuild / developers := List(
+    Developer("michaelpigg", "Michael Pigg", "mikepigg@highlylogical.com", url("https://github.com/michaelpigg")
+  )
+)
 enablePlugins(SbtPlugin)
 
 lazy val root = (project in file("."))
