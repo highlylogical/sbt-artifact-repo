@@ -8,7 +8,10 @@ import java.io.{File, FileInputStream, FilenameFilter}
 import java.util.Properties
 
 case class ArtifactRepoConfig(host: String, publishRepo: String, pullRepo: String, credentials: Credentials, protocol: String = "https") {
-  def mavenResolver(direction: String): MavenRepository = s"$direction-repo" at s"$protocol://$host/$pullRepo"
+  def mavenResolver(direction: String): MavenRepository = {
+    val repo = if (direction == "pull") pullRepo else publishRepo
+    s"$repo-$direction" at s"$protocol://$host/$repo"
+  }
 }
 
 object ArtifactRepoPlugin extends AutoPlugin {

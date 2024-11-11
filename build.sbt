@@ -1,7 +1,7 @@
 import xerial.sbt.Sonatype.sonatypeCentralHost
 
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
-ThisBuild / sbtPluginPublishLegacyMavenStyle := false
+//ThisBuild / sbtPluginPublishLegacyMavenStyle := false
 
 ThisBuild / scalaVersion := "2.12.20"
 
