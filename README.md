@@ -38,3 +38,29 @@ Example debug output:
 [sbt-artifact-repo] Loaded configuration from: /home/user/.artifactrepo/myrepo.artifactrepo
 [sbt-artifact-repo][DEBUG]   Configuration details: host=repo.acme.com, pullRepo=maven-virtual, publishRepo=maven-local, protocol=https
 ```
+
+## Development
+
+### Running Tests
+
+The plugin has both unit tests and integration tests using the SBT scripted framework.
+
+**Unit tests:**
+```bash
+sbt test
+```
+
+**Scripted integration tests:**
+```bash
+sbt scripted
+```
+
+Run a specific scripted test:
+```bash
+sbt "scripted sbt-artifact-repo/valid-config"
+```
+
+The scripted tests include:
+- `valid-config`: Tests loading a valid configuration file
+- `missing-properties`: Tests handling incomplete configuration files
+- `no-config`: Tests that the plugin works when no configuration file exists
