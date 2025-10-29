@@ -1,0 +1,7 @@
+# Test that the plugin works when no configuration file exists
+
+# The plugin should load without any errors
+> show resolvers
+
+# Should have no additional credentials
+> show credentials

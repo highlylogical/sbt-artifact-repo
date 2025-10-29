@@ -1,0 +1,13 @@
+# Test that the plugin loads with a valid configuration file
+
+# Set up the config file in the expected location
+$ copy-file test.artifactrepo ${user.home}/test.artifactrepo
+
+# Run show resolvers to verify the plugin loaded and configured repositories
+> show resolvers
+
+# Check that credentials were loaded
+> show credentials
+
+# Clean up
+$ delete ${user.home}/test.artifactrepo

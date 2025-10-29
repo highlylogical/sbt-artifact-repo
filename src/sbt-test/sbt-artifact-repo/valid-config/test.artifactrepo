@@ -1,0 +1,7 @@
+realm=Test Realm
+host=repo.test.com
+user=testuser
+password=testpass
+pull-repo=maven-virtual
+publish-repo=maven-local
+protocol=https

@@ -19,5 +19,14 @@ enablePlugins(SbtPlugin)
 
 lazy val root = (project in file("."))
     .settings(
-        name := "sbt-artifact-repo"
+        name := "sbt-artifact-repo",
+        libraryDependencies ++= Seq(
+          "org.scalatest" %% "scalatest" % "3.2.19" % Test
+        ),
+        // Scripted test settings
+        scriptedLaunchOpts := { scriptedLaunchOpts.value ++
+          Seq("-Xmx1024M", "-Dplugin.version=" + version.value)
+        },
+        scriptedBufferLog := false
     )
+    .enablePlugins(ScriptedPlugin)

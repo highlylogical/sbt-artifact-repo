@@ -1,0 +1,10 @@
+# Test that the plugin handles missing properties gracefully
+
+# Set up the incomplete config file
+$ copy-file incomplete.artifactrepo ${user.home}/incomplete.artifactrepo
+
+# The plugin should still load without crashing
+> show resolvers
+
+# Clean up
+$ delete ${user.home}/incomplete.artifactrepo
