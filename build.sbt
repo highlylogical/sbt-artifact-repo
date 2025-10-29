@@ -19,5 +19,8 @@ enablePlugins(SbtPlugin)
 
 lazy val root = (project in file("."))
     .settings(
-        name := "sbt-artifact-repo"
+        name := "sbt-artifact-repo",
+        libraryDependencies ++= Seq(
+          "org.scalatest" %% "scalatest" % "3.2.19" % Test
+        )
     )
