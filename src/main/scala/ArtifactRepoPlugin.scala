@@ -19,11 +19,25 @@ object ArtifactRepoPlugin extends AutoPlugin {
   override def trigger = allRequirements
 
   override def requires = sbt.plugins.JvmPlugin
+  
+  // Enable debug logging with -Dsbt.artifact.repo.debug=true
+  private val debugEnabled: Boolean = sys.props.get("sbt.artifact.repo.debug").contains("true")
+  
+  private def debug(msg: => String): Unit = {
+    if (debugEnabled) {
+      println(s"[sbt-artifact-repo][DEBUG] $msg")
+    }
+  }
 
   override def projectSettings: Seq[Def.Setting[_]] = {
+    debug("Initializing artifact repository plugin")
     val pullRepos = artifactRepos.map(_.mavenResolver("pull"))
     val publishRepo = artifactRepos.headOption.map(_.mavenResolver("publish"))
     val credentials = artifactRepos.map(_.credentials)
+    
+    debug(s"Configured ${pullRepos.size} pull repositories")
+    debug(s"Configured publish repository: ${publishRepo.map(_.name).getOrElse("none")}")
+    debug(s"Configured ${credentials.size} credential(s)")
     
     Seq(
       Keys.credentials ++= credentials,
@@ -34,19 +48,27 @@ object ArtifactRepoPlugin extends AutoPlugin {
 
 
   lazy val artifactRepos: Seq[ArtifactRepoConfig] = {
+    debug(s"Searching for .artifactrepo files in user home: ${Path.userHome}")
+    
     val configFiles = Path.userHome.listFiles(new FilenameFilter {
       override def accept(dir: File, name: String): Boolean = {
         name.endsWith(".artifactrepo")
       }
     })
     
+    debug(s"Found ${configFiles.length} .artifactrepo file(s)")
+    
     val results = configFiles.map(file => (file, readRepoConfig(file)))
     val (successfulConfigs, failedConfigs) = results.partition(_._2.isRight)
     
+    debug(s"Successfully parsed ${successfulConfigs.length} configuration(s)")
+    debug(s"Failed to parse ${failedConfigs.length} configuration(s)")
+    
     // Log successful configuration loads
     successfulConfigs.foreach {
-      case (file, Right(_)) =>
+      case (file, Right(config)) =>
         println(s"[sbt-artifact-repo] Loaded configuration from: $file")
+        debug(s"  Configuration details: host=${config.host}, pullRepo=${config.pullRepo}, publishRepo=${config.publishRepo}, protocol=${config.protocol}")
       case _ => // This shouldn't happen due to partition
     }
     
@@ -65,17 +87,24 @@ object ArtifactRepoPlugin extends AutoPlugin {
   import scala.collection.JavaConverters._
   
   def readRepoConfig(file: File): Either[String, ArtifactRepoConfig] = {
+    debug(s"Attempting to read configuration from: $file")
+    
     Try {
       val props = new Properties()
       props.load(new FileInputStream(file))
       val keys = props.stringPropertyNames().asScala.toSet
       
+      debug(s"  Properties found: ${keys.mkString(", ")}")
+      
       val requiredKeys = Set("realm", "host", "user", "password", "pull-repo", "publish-repo")
       val missingKeys = requiredKeys -- keys
       
       if (missingKeys.nonEmpty) {
+        debug(s"  Missing required properties: ${missingKeys.mkString(", ")}")
         Left(s"Configuration file '$file' is missing required properties: ${missingKeys.mkString(", ")}")
       } else {
+        debug(s"  All required properties present")
+        debug(s"  Creating configuration for host: ${props.getProperty("host")}")
         Right(ArtifactRepoConfig(
           props.getProperty("host"),
           props.getProperty("publish-repo"),
@@ -91,7 +120,9 @@ object ArtifactRepoPlugin extends AutoPlugin {
       }
     } match {
       case Success(result) => result
-      case Failure(exception) => Left(s"Failed to read configuration file '$file': ${exception.getMessage}")
+      case Failure(exception) => 
+        debug(s"  Exception reading file: ${exception.getClass.getSimpleName}: ${exception.getMessage}")
+        Left(s"Failed to read configuration file '$file': ${exception.getMessage}")
     }
   }
 }
