@@ -40,16 +40,25 @@ object ArtifactRepoPlugin extends AutoPlugin {
       }
     })
     
-    val (configs, errors) = configFiles.map(readRepoConfig).partition(_.isRight)
+    val results = configFiles.map(file => (file, readRepoConfig(file)))
+    val (successfulConfigs, failedConfigs) = results.partition(_._2.isRight)
     
-    // Only log errors, not successes
-    errors.foreach {
-      case Left(errorMsg) => System.err.println(s"[sbt-artifact-repo] $errorMsg")
+    // Log successful configuration loads
+    successfulConfigs.foreach {
+      case (file, Right(_)) =>
+        println(s"[sbt-artifact-repo] Loaded configuration from: $file")
       case _ => // This shouldn't happen due to partition
     }
     
-    configs.collect {
-      case Right(config) => config
+    // Log errors
+    failedConfigs.foreach {
+      case (file, Left(errorMsg)) =>
+        System.err.println(s"[sbt-artifact-repo] $errorMsg")
+      case _ => // This shouldn't happen due to partition
+    }
+    
+    successfulConfigs.collect {
+      case (_, Right(config)) => config
     }
   }
 
