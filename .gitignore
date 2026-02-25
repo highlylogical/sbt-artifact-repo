@@ -1,29 +1,37 @@
-# SBT specific
+# sbt
 target/
 project/target/
-project/project/target/
-lib_managed/
-src_managed/
-project/boot/
-.history
-.cache
-.lib/
+project/project/
+*.jar
+!lib/*.jar
 
-# Scala-IDE specific
-.scala_dependencies
-.worksheet
-
-# IntelliJ
-.idea/
-*.iml
-*.iws
-*.ipr
-out/
-
-# VS Code
-.vscode/
-.metals/
+# Bloop / BSP
 .bloop/
+.bsp/
 
-# Mac
+# IDE / editors
+.idea/
+.vscode/
+*.iml
+.metals/
+project/metals.sbt
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Env / secrets
+*.env
+credentials.env
+.env
+.env.*
+
+# Logs
+*.log
+
+# Scala
+*.class
+*.log
+
+artifactory-test
+compose.yaml

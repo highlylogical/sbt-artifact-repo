@@ -1,17 +1,22 @@
 package com.highlylogical.oss
 
-import sbt.io.Path
-import sbt.toRepositoryName
 import sbt.{AutoPlugin, Credentials, Def, Keys, MavenRepository}
+import sbt._
+import sbt.util.Logger
 
-import java.io.{File, FileInputStream, FilenameFilter}
+import java.io.{File, FileInputStream}
 import java.util.Properties
 import scala.util.{Try, Success, Failure}
 
 case class ArtifactRepoConfig(host: String, publishRepo: String, pullRepo: String, credentials: Credentials, protocol: String = "https") {
   def mavenResolver(direction: String): MavenRepository = {
     val repo = if (direction == "pull") pullRepo else publishRepo
-    s"$repo-$direction" at s"$protocol://$host/$repo"
+    val mavenRepo = s"$repo-$direction" at s"$protocol://$host/$repo"
+    if (protocol == "http") {
+      mavenRepo.withAllowInsecureProtocol(true)
+    } else {
+      mavenRepo    
+    }
   }
 }
 
@@ -19,110 +24,93 @@ object ArtifactRepoPlugin extends AutoPlugin {
   override def trigger = allRequirements
 
   override def requires = sbt.plugins.JvmPlugin
-  
-  // Enable debug logging with -Dsbt.artifact.repo.debug=true
-  private val debugEnabled: Boolean = sys.props.get("sbt.artifact.repo.debug").contains("true")
-  
-  private def debug(msg: => String): Unit = {
-    if (debugEnabled) {
-      println(s"[sbt-artifact-repo][DEBUG] $msg")
-    }
+
+  object autoImport {
+    val artifactRepoConfigPath = settingKey[File]("Path to location of artifact repo configurations")
+    val artifactRepoConfigFilePattern = settingKey[String]("Pattern match for config files")
+  }
+
+  import autoImport._
+
+  private val artifactRepoConfigs = settingKey[Seq[ArtifactRepoConfig]]("Loaded artifact repo configs (cached per project)")
+
+  lazy val artifactRepoSettings: Seq[Def.Setting[_]] = Seq(
+    artifactRepoConfigFilePattern := ".*\\.artifactrepo",
+    artifactRepoConfigPath := sbt.io.Path.userHome
+  )
+
+  override def globalSettings: Seq[Setting[_]] = artifactRepoSettings
+
+  def loadConfig(path: File, pattern: String, log: Logger): Seq[ArtifactRepoConfig] = {
+    val files = Option(path.listFiles()).getOrElse(Array.empty[File])
+    files.filter(f => f.isFile && f.getName.matches(pattern)).flatMap { f =>
+      readRepoConfig(f) match {
+        case Right(config) => Some(config)
+        case Left(err) =>
+          log.warn(s"Invalid artifact repo config $f: $err")
+          None
+      }
+    }.toSeq
+  }
+
+  def loadCredentials(path: File, pattern: String, log: Logger): Seq[Credentials] = {
+    loadConfig(path, pattern, log).map(_.credentials)
+  }
+
+  def loadPublishRepo(path: File, pattern: String, log: Logger): Option[MavenRepository] = {
+    loadConfig(path, pattern, log).headOption.map(_.mavenResolver("publish"))
+  }
+
+  def loadResolvers(path: File, pattern: String, log: Logger): Seq[MavenRepository] = {
+    loadConfig(path, pattern, log).map(_.mavenResolver("pull")).toSeq
   }
 
   override def projectSettings: Seq[Def.Setting[_]] = {
-    debug("Initializing artifact repository plugin")
-    val pullRepos = artifactRepos.map(_.mavenResolver("pull"))
-    val publishRepo = artifactRepos.headOption.map(_.mavenResolver("publish"))
-    val credentials = artifactRepos.map(_.credentials)
-    
-    debug(s"Configured ${pullRepos.size} pull repositories")
-    debug(s"Configured publish repository: ${publishRepo.map(_.name).getOrElse("none")}")
-    debug(s"Configured ${credentials.size} credential(s)")
-    
     Seq(
-      Keys.credentials ++= credentials,
-      Keys.resolvers ++= pullRepos,
-      Keys.publishTo := publishRepo
+      artifactRepoConfigs := loadConfig(artifactRepoConfigPath.value, artifactRepoConfigFilePattern.value, Keys.sLog.value),
+      Keys.credentials ++= artifactRepoConfigs.value.map(_.credentials),
+      Keys.resolvers ++= artifactRepoConfigs.value.map(_.mavenResolver("pull")),
+      Keys.publishTo := artifactRepoConfigs.value.headOption.map(_.mavenResolver("publish"))
     )
   }
 
-
-  lazy val artifactRepos: Seq[ArtifactRepoConfig] = {
-    debug(s"Searching for .artifactrepo files in user home: ${Path.userHome}")
-    
-    val configFiles = Path.userHome.listFiles(new FilenameFilter {
-      override def accept(dir: File, name: String): Boolean = {
-        name.endsWith(".artifactrepo")
-      }
-    })
-    
-    debug(s"Found ${configFiles.length} .artifactrepo file(s)")
-    
-    val results = configFiles.map(file => (file, readRepoConfig(file)))
-    val (successfulConfigs, failedConfigs) = results.partition(_._2.isRight)
-    
-    debug(s"Successfully parsed ${successfulConfigs.length} configuration(s)")
-    debug(s"Failed to parse ${failedConfigs.length} configuration(s)")
-    
-    // Log successful configuration loads
-    successfulConfigs.foreach {
-      case (file, Right(config)) =>
-        println(s"[sbt-artifact-repo] Loaded configuration from: $file")
-        debug(s"  Configuration details: host=${config.host}, pullRepo=${config.pullRepo}, publishRepo=${config.publishRepo}, protocol=${config.protocol}")
-      case _ => // This shouldn't happen due to partition
-    }
-    
-    // Log errors
-    failedConfigs.foreach {
-      case (file, Left(errorMsg)) =>
-        System.err.println(s"[sbt-artifact-repo] $errorMsg")
-      case _ => // This shouldn't happen due to partition
-    }
-    
-    successfulConfigs.collect {
-      case (_, Right(config)) => config
-    }
-  }
-
-  import scala.collection.JavaConverters._
-  
   def readRepoConfig(file: File): Either[String, ArtifactRepoConfig] = {
-    debug(s"Attempting to read configuration from: $file")
-    
+    val props = new Properties()
     Try {
-      val props = new Properties()
-      props.load(new FileInputStream(file))
-      val keys = props.stringPropertyNames().asScala.toSet
-      
-      debug(s"  Properties found: ${keys.mkString(", ")}")
-      
+      var stream: FileInputStream = null
+      try {
+        stream = new FileInputStream(file)
+        props.load(stream)
+      } finally {
+        if (stream != null) try { stream.close() } catch { case _: Exception => }
+      }
+      val keys = props.stringPropertyNames()
       val requiredKeys = Set("realm", "host", "user", "password", "pull-repo", "publish-repo")
-      val missingKeys = requiredKeys -- keys
-      
-      if (missingKeys.nonEmpty) {
-        debug(s"  Missing required properties: ${missingKeys.mkString(", ")}")
-        Left(s"Configuration file '$file' is missing required properties: ${missingKeys.mkString(", ")}")
+      if (!requiredKeys.forall(keys.contains)) {
+        Left("Not all properties present")
       } else {
-        debug(s"  All required properties present")
-        debug(s"  Creating configuration for host: ${props.getProperty("host")}")
-        Right(ArtifactRepoConfig(
-          props.getProperty("host"),
-          props.getProperty("publish-repo"),
-          props.getProperty("pull-repo"),
-          Credentials(
-            props.getProperty("realm"),
-            props.getProperty("host"),
-            props.getProperty("user"),
-            props.getProperty("password")
-          ),
-          props.getProperty("protocol", "https")
-        ))
+        def get(key: String, default: String = ""): String = Option(props.getProperty(key)).getOrElse(default).trim
+        val host = get("host")
+        val publishRepo = get("publish-repo")
+        val pullRepo = get("pull-repo")
+        val realm = get("realm")
+        val user = get("user")
+        val password = get("password")
+        if (host.isEmpty || publishRepo.isEmpty || pullRepo.isEmpty || realm.isEmpty || user.isEmpty || password.isEmpty) {
+          Left("Required property missing or empty")
+        } else {
+          Right(ArtifactRepoConfig(
+            host,
+            publishRepo,
+            pullRepo,
+            Credentials(realm, host, user, password),
+            props.getProperty("protocol", "https").trim match { case "" => "https"; case p => p }
+          ))
+        }
       }
     } match {
-      case Success(result) => result
-      case Failure(exception) => 
-        debug(s"  Exception reading file: ${exception.getClass.getSimpleName}: ${exception.getMessage}")
-        Left(s"Failed to read configuration file '$file': ${exception.getMessage}")
+      case Success(either) => either
+      case Failure(e) => Left(Option(e.getMessage).getOrElse(e.toString))
     }
   }
 }
