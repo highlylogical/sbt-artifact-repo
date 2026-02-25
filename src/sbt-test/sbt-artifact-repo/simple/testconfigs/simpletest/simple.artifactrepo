@@ -1,0 +1,6 @@
+realm=Artifact Realm
+user=repo-user
+password=userpw
+pull-repo=artifacts/virtual
+publish-repo=artifacts/local
+host=artifacts.acme.com
