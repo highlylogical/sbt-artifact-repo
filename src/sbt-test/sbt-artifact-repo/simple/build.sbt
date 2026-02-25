@@ -14,8 +14,8 @@ def checkImpl(projectName: String): Def.Initialize[Task[Unit]] = Def.task {
 
   val testExpectation = expectations(projectName)
 
-  publishToShouldBe(testExpectation.publish, publishTo.value)
-  compareCredentials(testExpectation.credentials, credentials.value)
+  publishToShouldBe(testExpectation.publish, publishTo.value) shouldBe true
+  compareCredentials(testExpectation.credentials, credentials.value) shouldBe true
   compareResolvers(testExpectation.resolvers, resolvers.value) shouldBe true
 }
 

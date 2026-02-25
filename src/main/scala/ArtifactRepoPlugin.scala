@@ -6,6 +6,7 @@ import sbt.util.Logger
 
 import java.io.{File, FileInputStream}
 import java.util.Properties
+import scala.util.{Try, Success, Failure}
 
 case class ArtifactRepoConfig(host: String, publishRepo: String, pullRepo: String, credentials: Credentials, protocol: String = "https") {
   def mavenResolver(direction: String): MavenRepository = {
@@ -30,7 +31,9 @@ object ArtifactRepoPlugin extends AutoPlugin {
   }
 
   import autoImport._
-  
+
+  private val artifactRepoConfigs = settingKey[Seq[ArtifactRepoConfig]]("Loaded artifact repo configs (cached per project)")
+
   lazy val artifactRepoSettings: Seq[Def.Setting[_]] = Seq(
     artifactRepoConfigFilePattern := ".*\\.artifactrepo",
     artifactRepoConfigPath := sbt.io.Path.userHome
@@ -64,16 +67,17 @@ object ArtifactRepoPlugin extends AutoPlugin {
 
   override def projectSettings: Seq[Def.Setting[_]] = {
     Seq(
-      Keys.credentials ++= loadCredentials(artifactRepoConfigPath.value, artifactRepoConfigFilePattern.value, Keys.sLog.value),
-      Keys.resolvers ++= loadResolvers(artifactRepoConfigPath.value, artifactRepoConfigFilePattern.value, Keys.sLog.value),
-      Keys.publishTo := loadPublishRepo(artifactRepoConfigPath.value, artifactRepoConfigFilePattern.value, Keys.sLog.value)
+      artifactRepoConfigs := loadConfig(artifactRepoConfigPath.value, artifactRepoConfigFilePattern.value, Keys.sLog.value),
+      Keys.credentials ++= artifactRepoConfigs.value.map(_.credentials),
+      Keys.resolvers ++= artifactRepoConfigs.value.map(_.mavenResolver("pull")),
+      Keys.publishTo := artifactRepoConfigs.value.headOption.map(_.mavenResolver("publish"))
     )
   }
 
   def readRepoConfig(file: File): Either[String, ArtifactRepoConfig] = {
     val props = new Properties()
-    var stream: FileInputStream = null
-    try {
+    Try {
+      var stream: FileInputStream = null
       try {
         stream = new FileInputStream(file)
         props.load(stream)
@@ -83,27 +87,30 @@ object ArtifactRepoPlugin extends AutoPlugin {
       val keys = props.stringPropertyNames()
       val requiredKeys = Set("realm", "host", "user", "password", "pull-repo", "publish-repo")
       if (!requiredKeys.forall(keys.contains)) {
-        return Left("Not all properties present")
+        Left("Not all properties present")
+      } else {
+        def get(key: String, default: String = ""): String = Option(props.getProperty(key)).getOrElse(default).trim
+        val host = get("host")
+        val publishRepo = get("publish-repo")
+        val pullRepo = get("pull-repo")
+        val realm = get("realm")
+        val user = get("user")
+        val password = get("password")
+        if (host.isEmpty || publishRepo.isEmpty || pullRepo.isEmpty || realm.isEmpty || user.isEmpty || password.isEmpty) {
+          Left("Required property missing or empty")
+        } else {
+          Right(ArtifactRepoConfig(
+            host,
+            publishRepo,
+            pullRepo,
+            Credentials(realm, host, user, password),
+            props.getProperty("protocol", "https").trim match { case "" => "https"; case p => p }
+          ))
+        }
       }
-      def get(key: String, default: String = ""): String = Option(props.getProperty(key)).getOrElse(default).trim
-      val host = get("host")
-      val publishRepo = get("publish-repo")
-      val pullRepo = get("pull-repo")
-      val realm = get("realm")
-      val user = get("user")
-      val password = get("password")
-      if (host.isEmpty || publishRepo.isEmpty || pullRepo.isEmpty || realm.isEmpty || user.isEmpty || password.isEmpty) {
-        return Left("Required property missing or empty")
-      }
-      Right(ArtifactRepoConfig(
-        host,
-        publishRepo,
-        pullRepo,
-        Credentials(realm, host, user, password),
-        props.getProperty("protocol", "https").trim match { case "" => "https"; case p => p }
-      ))
-    } catch {
-      case e: java.io.IOException => Left(Option(e.getMessage).getOrElse(e.toString))
+    } match {
+      case Success(either) => either
+      case Failure(e) => Left(Option(e.getMessage).getOrElse(e.toString))
     }
   }
 }

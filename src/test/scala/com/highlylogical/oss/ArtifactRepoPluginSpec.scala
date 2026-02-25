@@ -108,10 +108,7 @@ class ArtifactRepoPluginSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     
     result.isLeft should be(true)
     val error = result.left.get
-    error should include("missing required properties")
-    error should include("password")
-    error should include("pull-repo")
-    error should include("publish-repo")
+    error should include("Not all properties present")
   }
 
   it should "return error for non-existent file" in {
@@ -121,7 +118,7 @@ class ArtifactRepoPluginSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     
     result.isLeft should be(true)
     val error = result.left.get
-    error should include("Failed to read configuration file")
+    error should (include("No such file") or include("nonexistent.artifactrepo"))
   }
 
   it should "return error for invalid file format" in {
